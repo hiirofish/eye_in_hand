@@ -47,7 +47,7 @@ except ImportError:
 class BlockDetector:
     def __init__(self):
         self.h_min = 0;   self.h_max = 178
-        self.s_min = 0;   self.s_max = 56
+        self.s_min = 0;   self.s_max = 100
         self.v_min = 179;  self.v_max = 255
         self.min_area = 300
         self.max_area = 30000 
@@ -154,13 +154,13 @@ class BlockDetector:
 class ObjectSearchApp:
 
     # ★ v10.2: TGTデフォルト値（フォールバック）
-    CALIB_Z1_DEFAULT = -31.9   
-    CALIB_X1_DEFAULT = 313     
-    CALIB_Y1_DEFAULT = 223     
-    CALIB_Z2_DEFAULT = 88.0    
-    CALIB_X2_DEFAULT = 276     
-    CALIB_Y2_DEFAULT = 403     
-    CALIB_FLOOR_Z_DEFAULT = -32.0  # TGTキャリブ時のfloor_z
+    CALIB_Z1_DEFAULT = None
+    CALIB_X1_DEFAULT = None
+    CALIB_Y1_DEFAULT = None
+    CALIB_Z2_DEFAULT = None
+    CALIB_X2_DEFAULT = None
+    CALIB_Y2_DEFAULT = None
+    CALIB_FLOOR_Z_DEFAULT = None
     TARGET_X = 285 
     
     # ★ v10.2: 全Z値を「床からの相対値(mm)」で定義
@@ -381,21 +381,21 @@ class ObjectSearchApp:
         step_frame = tk.Frame(f_steps)
         step_frame.pack(padx=3, pady=2, fill="x")
 
-        self.search_btn = tk.Button(step_frame, text="Step1: 探索",
+        self.search_btn = tk.Button(step_frame, text="Step1:\n探索",
                   command=self.toggle_search,
                   bg="#2266aa", fg="white",
-                  font=("MS Gothic", 9), width=11)
-        self.search_btn.pack(side="left", padx=1, pady=2)
+                  font=("MS Gothic", 9), width=8, height=2)
+        self.search_btn.pack(side="left", padx=2, pady=2)
 
-        tk.Button(step_frame, text="Step2: R軸合わせ",
+        tk.Button(step_frame, text="Step2:\nR軸合わせ",
                   command=self.test_r_align,
                   bg="#7744aa", fg="white",
-                  font=("MS Gothic", 9), width=13).pack(side="left", padx=1, pady=2)
+                  font=("MS Gothic", 9), width=10, height=2).pack(side="left", padx=2, pady=2)
 
-        tk.Button(step_frame, text="Step3: 把持",
+        tk.Button(step_frame, text="Step3:\n把持",
                   command=self.test_grasp,
                   bg="#8B0000", fg="white",
-                  font=("MS Gothic", 9), width=9).pack(side="left", padx=1, pady=2)
+                  font=("MS Gothic", 9), width=8, height=2).pack(side="left", padx=2, pady=2)
 
         self.status_label = tk.Label(f_steps, text="待機中", font=("Consolas", 10, "bold"), fg="gray")
         self.status_label.pack(pady=2)
@@ -628,7 +628,7 @@ class ObjectSearchApp:
                             fg="green"))
                     
                     if det:
-                        obj_long = det['short_angle'] + 90
+                        obj_long = det['short_angle'] 
                         angle_diff = hand_cam_angle - obj_long
                         while angle_diff > 90: angle_diff -= 180
                         while angle_diff < -90: angle_diff += 180
@@ -725,7 +725,7 @@ class ObjectSearchApp:
         self.log(f"[R-ALIGN] 基準(R-J1): {self.hand_base_diff:.1f}°")
         self.log(f"[R-ALIGN] 現在 J1={j1_now:.1f}° R={curr_r:.1f}°")
         
-        target_r = j1_now + self.hand_base_diff + obj_angle + 90
+        target_r = j1_now + self.hand_base_diff + obj_angle 
         self.log(f"[R-ALIGN] target_R = {j1_now:.1f} + {self.hand_base_diff:.1f} + ({obj_angle:.1f}) + 90 = {target_r:.1f}°")
         
         adjust_count = 0
@@ -778,7 +778,7 @@ class ObjectSearchApp:
             self.log("=" * 60)
             self.log("★ R軸角度合わせテスト (v10.0 水平基準)")
             self.log(f"  基準(R-J1) = {self.hand_base_diff:.1f}°")
-            self.log(f"  式: target_R = J1 + 基準 + obj_angle + 90")
+            self.log(f"  式: target_R = J1 + 基準 + obj_angle ")
             self.log("=" * 60)
             
             p = dType.GetPose(self.api)
@@ -831,7 +831,7 @@ class ObjectSearchApp:
     
     def _descend_to_grasp(self):
         p = dType.GetPose(self.api)
-        target_z = self.Z_GRASP
+        target_z = self._abs_z(self.Z_GRASP_REL)
         
         self.log(f"[DESCEND] Z={p[2]:.1f} → Z={target_z:.1f} (一気に降下)")
         
@@ -847,13 +847,14 @@ class ObjectSearchApp:
     
     def _lift_up(self):
         p = dType.GetPose(self.api)
-        self.log(f"[LIFT] 現在Z={p[2]:.1f} → 目標Z={self.Z_LIFT}")
+        target_z = self._abs_z(self.Z_LIFT_REL)
+        self.log(f"[LIFT] 現在Z={p[2]:.1f} → 目標Z={target_z:.1f}")
         
         MODE_PTP_MOVL_XYZ = 2
         dType.SetQueuedCmdClear(self.api)
         dType.SetQueuedCmdStartExec(self.api)
         dType.SetPTPCmd(self.api, MODE_PTP_MOVL_XYZ,
-                       p[0], p[1], self.Z_LIFT, p[3], isQueued=1)
+                       p[0], p[1], target_z, p[3], isQueued=1)
         time.sleep(4.0)
         
         p2 = dType.GetPose(self.api)

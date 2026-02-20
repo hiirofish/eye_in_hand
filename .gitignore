@@ -1,0 +1,13 @@
+# === キャリブレーション・環境依存ファイル ===
+*.json
+
+# （必要に応じて個別に指定したい場合は以下のように書きますが、*.json で一括指定する方が楽です）
+# gripper_calibration.json
+# hand_calibration.json
+# scan_area.json
+# tgt_calibration.json
+
+# === Pythonのシステムファイル（おまけ・推奨） ===
+__pycache__/
+*.py[cod]
+*$py.class
