@@ -1,0 +1,11 @@
+{
+  "scan_j1_min": -47.42,
+  "scan_j1_max": 20.20,
+  "scan_reach_min": 112.19,
+  "scan_reach_max": 225.95,
+  "scan_z_min": -9.27,
+  "scan_z_max": -9.27,
+  "n_points": 4,
+  "r_offset": 106.9,
+  "saved_at": "2026-02-16 14:11:30"
+}

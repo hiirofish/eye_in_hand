@@ -1,0 +1,11 @@
+{
+  "calib_z1": -7.279632568359375,
+  "calib_x1": 319,
+  "calib_y1": 174,
+  "calib_z2": 102.72036743164062,
+  "calib_x2": 223,
+  "calib_y2": 366,
+  "floor_z": -7.279632568359375,
+  "saved_at": "2026-02-20 10:07:04",
+  "note": "TGT calibration: Z1=floor(-7.3), Z2=floor+110mm"
+}
