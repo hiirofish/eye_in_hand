@@ -138,6 +138,7 @@ class BlockDetector:
             cx, cy = det['center']
             cv2.drawContours(frame, [det['box']], 0, (0, 255, 0), 2)
             cv2.circle(frame, (cx, cy), 6, (0, 0, 255), -1)
+            # 描画用の角度表示はデバッグ用として残す
             cv2.putText(frame, f"Ang:{det['short_angle']:.1f}", (10, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             cv2.putText(frame, f"({cx},{cy}) A:{det['area']:.0f}",
@@ -596,16 +597,32 @@ class ObjectSearchApp:
                 dx = cx - tgt_x
                 dy = cy - tgt_y
                 cv2.putText(display, f"dx:{dx:+d} dy:{dy:+d}", (10, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                self.last_detected_angle = det['short_angle']
                 
-                obj_ang = det['short_angle']
-                long_ang_rad = np.radians(obj_ang + 90)
+                # ======= ★ここから差し替え =======
+                # OpenCVの曖昧な角度を捨て、箱の4頂点から直接「長辺の角度」を計算する
+                # 定義：画面水平右が0度、左回り(CCW)が＋
+                box = det['box']
+                d01 = np.hypot(box[0][0] - box[1][0], box[0][1] - box[1][1])
+                d12 = np.hypot(box[1][0] - box[2][0], box[1][1] - box[2][1])
+                if d01 > d12:
+                    dx_box, dy_box = box[1][0] - box[0][0], -(box[1][1] - box[0][1]) # Y軸を反転(-dy_box)させて左回り正にする
+                else:
+                    dx_box, dy_box = box[2][0] - box[1][0], -(box[2][1] - box[1][1])
+                
+                obj_long_deg = math.degrees(math.atan2(dy_box, dx_box))
+                while obj_long_deg > 90: obj_long_deg -= 180
+                while obj_long_deg <= -90: obj_long_deg += 180
+                self.last_detected_angle = obj_long_deg
+                
+                # 緑の線（長辺）の描画（赤線と全く同じ計算式で描く）
+                long_ang_rad = np.radians(obj_long_deg)
                 L_obj = 80
                 odx = int(L_obj * np.cos(long_ang_rad))
-                ody = int(L_obj * np.sin(long_ang_rad))
+                ody = int(L_obj * -np.sin(long_ang_rad)) # Y反転(-sin)で描画
                 cv2.line(display, (cx - odx, cy - ody), (cx + odx, cy + ody), (0, 255, 0), 3)
-                cv2.putText(display, f"OBJ:{obj_ang:+.1f}", (cx + odx + 5, cy + ody),
+                cv2.putText(display, f"OBJ:{obj_long_deg:+.1f}", (cx + odx + 5, cy + ody),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+                # ======= ★ここまで =======
 
             h, w = display.shape[:2]
             hcx, hcy = w // 2, h // 2
@@ -628,10 +645,12 @@ class ObjectSearchApp:
                             fg="green"))
                     
                     if det:
-                        obj_long = det['short_angle'] 
-                        angle_diff = hand_cam_angle - obj_long
+                        # 直交状態(緑の線 + 90度)をターゲットにする
+                        target_hand = obj_long_deg + 90
+                        angle_diff = hand_cam_angle - target_hand
+                        
                         while angle_diff > 90: angle_diff -= 180
-                        while angle_diff < -90: angle_diff += 180
+                        while angle_diff <= -90: angle_diff += 180
                         
                         if abs(angle_diff) < 10:
                             color_judge = (0, 255, 0)
@@ -715,19 +734,46 @@ class ObjectSearchApp:
                 self._set_status("物体見えず", "red")
                 return False
         
-        obj_angle = det['short_angle']
+        # ======= ★ここから差し替え =======
+        # カメラ映像と同じく、頂点座標から長辺の絶対角度を計算する
+        box = det['box']
+        d01 = np.hypot(box[0][0] - box[1][0], box[0][1] - box[1][1])
+        d12 = np.hypot(box[1][0] - box[2][0], box[1][1] - box[2][1])
+        if d01 > d12:
+            dx_box, dy_box = box[1][0] - box[0][0], -(box[1][1] - box[0][1])
+        else:
+            dx_box, dy_box = box[2][0] - box[1][0], -(box[2][1] - box[1][1])
+            
+        obj_long_deg = math.degrees(math.atan2(dy_box, dx_box))
+        while obj_long_deg > 90: obj_long_deg -= 180
+        while obj_long_deg <= -90: obj_long_deg += 180
         
         p = dType.GetPose(self.api)
         curr_r = p[3]
         j1_now = math.degrees(math.atan2(p[1], p[0]))
         
-        self.log(f"[R-ALIGN] 物体角度: {obj_angle:.1f}°")
-        self.log(f"[R-ALIGN] 基準(R-J1): {self.hand_base_diff:.1f}°")
-        self.log(f"[R-ALIGN] 現在 J1={j1_now:.1f}° R={curr_r:.1f}°")
+        # 1. 画面上の赤い線（HAND）の角度
+        hand_cam_angle = (curr_r - j1_now) - self.hand_base_diff
         
-        target_r = j1_now + self.hand_base_diff + obj_angle 
-        self.log(f"[R-ALIGN] target_R = {j1_now:.1f} + {self.hand_base_diff:.1f} + ({obj_angle:.1f}) + 90 = {target_r:.1f}°")
+        # 2. 直交させたいので、目標角度は「緑の長辺の角度 + 90度」
+        target_hand_angle = obj_long_deg + 90
         
+        # 3. ズレ（diff）を計算
+        diff = target_hand_angle - hand_cam_angle
+        
+        # 4. 最短距離で回るように -90〜+90 に丸める
+        while diff > 90: diff -= 180
+        while diff <= -90: diff += 180
+        
+        # 5. 現在のR軸にズレ分を足す
+        target_r = curr_r + diff
+        
+        self.log(f"[R-ALIGN] 画面の赤い線(HAND): {hand_cam_angle:+.1f}°")
+        self.log(f"[R-ALIGN] 画面の緑の線(OBJ) : {obj_long_deg:+.1f}°")
+        self.log(f"[R-ALIGN] ズレ(diff) : {diff:+.1f}°")
+        self.log(f"[R-ALIGN] 現在R = {curr_r:.1f}° → 目標R = {target_r:.1f}°")
+        # ======= ★ここまで =======
+
         adjust_count = 0
         while target_r > self.R_MAX and adjust_count < 4:
             target_r -= 180
@@ -865,7 +911,7 @@ class ObjectSearchApp:
         if self.searching:
             self.stop_flag.set()
             self.searching = False
-            self.search_btn.config(text="Step1: 探索", bg="#2266aa")
+            self.search_btn.config(text="Step1:\n探索", bg="#2266aa")
             self._set_status("停止", "orange")
         else:
             if not self.is_connected or not self.is_camera_running:
@@ -874,7 +920,7 @@ class ObjectSearchApp:
                 self.log("床Z未設定！Step 0でキャリブしてください", "ERROR"); return
             self.searching = True
             self.stop_flag.clear()
-            self.search_btn.config(text="■ 停止", bg="red")
+            self.search_btn.config(text="■\n停止", bg="red")
             self._set_status("Step1: 探索中...", "blue")
             threading.Thread(target=self._search_worker, daemon=True).start()
 
