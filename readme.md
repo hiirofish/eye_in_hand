@@ -13,6 +13,10 @@ Dobot Magician + Eye-in-Hand カメラ構成による自動物体探索・把持
 - 全 Z 値を「床からの相対値」で管理 → 電源再投入時のZ原点ズレに対応
 - R 軸角度合わせによる物体長辺方向への把持
 
+| カメラ設置状態 | 物体認識ビュー |
+| :---: | :---: |
+| ![Camera Settings](img/camera_settings.png) | ![Object View](img/object_view.png) |
+
 ## バージョン履歴
 
 | Ver | 内容 |
